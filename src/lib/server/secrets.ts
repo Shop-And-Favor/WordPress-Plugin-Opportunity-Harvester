@@ -52,8 +52,30 @@ export async function ensureDatabaseUrlFromSecrets() {
   const needsDb = !process.env.DATABASE_URL;
   const needsOrKey = !process.env.OPENROUTER_API_KEY;
 
+  // Both already in env — no Secrets Manager call needed
   if (!needsDb && !needsOrKey) {
     return { databaseUrl: process.env.DATABASE_URL!, openRouterKey: process.env.OPENROUTER_API_KEY! };
+  }
+
+  // DATABASE_URL is set but OpenRouter key is missing — fetch key only, never block on failure
+  if (!needsDb && needsOrKey) {
+    try {
+      const env = getEnv();
+      const client = new SecretsManagerClient({ region: env.AWS_REGION });
+      if (env.OPENROUTER_SECRET_ARN) {
+        const orResponse = await client.send(
+          new GetSecretValueCommand({ SecretId: env.OPENROUTER_SECRET_ARN }),
+        );
+        if (orResponse.SecretString) {
+          const orPayload = parseSecretPayload(orResponse.SecretString);
+          const key = orPayload.OPEN_ROUTER_API_KEY || orPayload.OPENROUTER_API_KEY;
+          if (key) process.env.OPENROUTER_API_KEY = key;
+        }
+      }
+    } catch (err) {
+      console.warn("Could not fetch OpenRouter key from Secrets Manager:", err);
+    }
+    return { databaseUrl: process.env.DATABASE_URL!, openRouterKey: process.env.OPENROUTER_API_KEY };
   }
 
   if (resolving) {
