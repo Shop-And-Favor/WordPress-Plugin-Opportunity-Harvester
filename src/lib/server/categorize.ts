@@ -11,6 +11,13 @@ import type { PluginMetrics } from "@/lib/server/wordpress";
 const BATCH_SIZE = 25;
 const TAXONOMY_SAMPLE = 300;
 
+export type ProgressEvent =
+  | { phase: "taxonomy"; taxonomyCount: number }
+  | { phase: "classify"; processed: number; total: number; classified: number }
+  | { phase: "score"; scored: number; total: number };
+
+export type ProgressCallback = (event: ProgressEvent) => Promise<void> | void;
+
 function parseOpportunityTier(value: string): OpportunityTier {
   if (value === "high" || value === "medium" || value === "low") return value;
   return "low";
@@ -62,6 +69,7 @@ async function buildTaxonomy(
 async function classifyAllPlugins(
   prisma: Awaited<ReturnType<typeof getPrisma>>,
   taxonomy: TaxonomyEntry[],
+  onProgress?: ProgressCallback,
 ): Promise<number> {
   const allPlugins = await prisma.plugin.findMany({
     select: { id: true, slug: true, name: true, shortDescription: true },
@@ -126,6 +134,15 @@ async function classifyAllPlugins(
         // Duplicate — already mapped (shouldn't happen on full rebuild but safe)
       }
     }
+
+    if (onProgress) {
+      await onProgress({
+        phase: "classify",
+        processed: Math.min(offset + batch.length, allPlugins.length),
+        total: allPlugins.length,
+        classified,
+      });
+    }
   }
 
   return classified;
@@ -135,6 +152,7 @@ async function classifyAllPlugins(
 
 async function scoreCategories(
   prisma: Awaited<ReturnType<typeof getPrisma>>,
+  onProgress?: ProgressCallback,
 ): Promise<number> {
   const categories = await prisma.pluginCategory.findMany({
     include: {
@@ -194,6 +212,10 @@ async function scoreCategories(
     });
 
     scored += 1;
+
+    if (onProgress) {
+      await onProgress({ phase: "score", scored, total: categories.length });
+    }
   }
 
   return scored;
@@ -201,19 +223,20 @@ async function scoreCategories(
 
 // ─── Public entry point ───────────────────────────────────────────────────────
 
-export async function runCategorization() {
+export async function runCategorization(onProgress?: ProgressCallback) {
   const prisma = await getPrisma();
 
   console.log("[categorize] Phase 1: building taxonomy…");
   const { taxonomy, inserted: taxonomyCount } = await buildTaxonomy(prisma);
   console.log(`[categorize] Taxonomy: ${taxonomyCount} category pairs inserted.`);
+  if (onProgress) await onProgress({ phase: "taxonomy", taxonomyCount });
 
   console.log("[categorize] Phase 2: classifying plugins…");
-  const classified = await classifyAllPlugins(prisma, taxonomy);
+  const classified = await classifyAllPlugins(prisma, taxonomy, onProgress);
   console.log(`[categorize] Classified: ${classified} plugin-category assignments.`);
 
   console.log("[categorize] Phase 3: scoring categories…");
-  const scored = await scoreCategories(prisma);
+  const scored = await scoreCategories(prisma, onProgress);
   console.log(`[categorize] Scored: ${scored} categories.`);
 
   return { taxonomy: taxonomyCount, classified, scored };

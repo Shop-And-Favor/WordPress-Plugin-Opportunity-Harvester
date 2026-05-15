@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@aws-sdk/client-secrets-manager": "^3.1045.0",
+    "@aws-sdk/client-sqs": "^3.1047.0",
     "@prisma/client": "^6.17.1",
     "next": "16.2.6",
     "react": "19.2.4",

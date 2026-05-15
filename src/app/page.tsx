@@ -317,11 +317,66 @@ export default function Home() {
     }
   }
 
-  async function runCategorization() {    setCategorizing(true);
-    setLoadingMessage("Running categorization (this may take a few minutes)…");
+  async function runCategorization() {
+    setCategorizing(true);
+    setLoadingMessage("Starting categorization job…");
     setError(null);
     try {
-      await requestJson("/api/categorize", { method: "POST" });
+      const enqueue = (await requestJson("/api/categorize", { method: "POST" })) as {
+        ok: boolean;
+        jobId?: number;
+        error?: string;
+      };
+      if (!enqueue.ok || !enqueue.jobId) {
+        throw new Error(enqueue.error ?? "Failed to start categorization job");
+      }
+      const jobId = enqueue.jobId;
+
+      // Poll until the worker finishes (or fails)
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+        await new Promise((r) => setTimeout(r, 3000));
+        const res = (await requestJson(`/api/categorize/jobs/${jobId}`)) as {
+          ok: boolean;
+          job?: {
+            status: "pending" | "processing" | "completed" | "failed";
+            phase: string | null;
+            totalPlugins: number;
+            processedCount: number;
+            taxonomyCount: number;
+            classifiedCount: number;
+            lastError: string | null;
+          };
+          error?: string;
+        };
+        if (!res.ok || !res.job) {
+          throw new Error(res.error ?? "Failed to read job status");
+        }
+        const job = res.job;
+        if (job.status === "pending") {
+          setLoadingMessage("Job queued — waiting for worker…");
+        } else if (job.phase === "taxonomy") {
+          setLoadingMessage(`Building taxonomy… (${job.taxonomyCount} categories)`);
+        } else if (job.phase === "classify") {
+          const total = job.totalPlugins || 1;
+          const pct = Math.floor((job.processedCount / total) * 100);
+          setLoadingMessage(
+            `Classifying plugins… ${job.processedCount}/${total} (${pct}%)`,
+          );
+        } else if (job.phase === "score") {
+          setLoadingMessage(
+            `Scoring categories… ${job.processedCount}/${job.totalPlugins}`,
+          );
+        }
+        if (job.status === "completed") {
+          setLoadingMessage("Categorization complete — refreshing…");
+          break;
+        }
+        if (job.status === "failed") {
+          throw new Error(job.lastError ?? "Categorization job failed");
+        }
+      }
+
       await refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Categorization failed.");

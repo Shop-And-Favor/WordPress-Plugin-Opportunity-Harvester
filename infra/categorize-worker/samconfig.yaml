@@ -1,0 +1,11 @@
+version: 0.1
+template: template.yaml
+parameter_overrides: []
+deploy:
+  parameters:
+    stack_name: categorize-worker
+    region: eu-west-2
+    capabilities: CAPABILITY_IAM
+    confirm_changeset: false
+    resolve_s3: true
+    s3_prefix: categorize-worker

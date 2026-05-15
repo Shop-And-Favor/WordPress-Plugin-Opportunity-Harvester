@@ -20,6 +20,7 @@ frontend:
         - echo "DB_PORT=$DB_PORT" >> .env.production
         - echo "APP_USER_AGENT=$APP_USER_AGENT" >> .env.production
         - echo "AWS_REGION=$AWS_REGION" >> .env.production
+        - echo "CATEGORIZE_QUEUE_URL=$CATEGORIZE_QUEUE_URL" >> .env.production
         - npm run build
   artifacts:
     baseDirectory: .next

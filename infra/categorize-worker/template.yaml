@@ -1,0 +1,77 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Async categorization worker for WordPressOpportunityHarvester
+
+Parameters:
+  DbSecretArn:
+    Type: String
+    Description: ARN of the DB credentials secret
+    Default: arn:aws:secretsmanager:eu-west-2:905418231751:secret:credentials-db-mysql-wellmind-GHR3MG
+  OpenRouterSecretArn:
+    Type: String
+    Description: ARN of the OpenRouter API key secret
+    Default: arn:aws:secretsmanager:eu-west-2:905418231751:secret:secret-api-key-sf-ai-management-helper-openrouter-api-key-8BvnV4
+
+Globals:
+  Function:
+    Runtime: nodejs20.x
+    MemorySize: 1024
+    Timeout: 900
+    Architectures:
+      - x86_64
+
+Resources:
+  CategorizeQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: categorize-jobs
+      VisibilityTimeout: 960
+      MessageRetentionPeriod: 1209600
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt CategorizeDLQ.Arn
+        maxReceiveCount: 2
+
+  CategorizeDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: categorize-jobs-dlq
+      MessageRetentionPeriod: 1209600
+
+  CategorizeWorkerFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: categorize-worker
+      Handler: handler.handler
+      CodeUri: ./dist
+      ReservedConcurrentExecutions: 1
+      Environment:
+        Variables:
+          DB_SECRET_ARN: !Ref DbSecretArn
+          OPENROUTER_SECRET_ARN: !Ref OpenRouterSecretArn
+          AWS_NODEJS_CONNECTION_REUSE_ENABLED: "1"
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - secretsmanager:GetSecretValue
+              Resource:
+                - !Ref DbSecretArn
+                - !Ref OpenRouterSecretArn
+      Events:
+        SqsEvent:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt CategorizeQueue.Arn
+            BatchSize: 1
+
+Outputs:
+  QueueUrl:
+    Description: SQS queue URL for enqueueing categorize jobs
+    Value: !Ref CategorizeQueue
+    Export:
+      Name: CategorizeQueueUrl
+  QueueArn:
+    Description: SQS queue ARN
+    Value: !GetAtt CategorizeQueue.Arn
+    Export:
+      Name: CategorizeQueueArn

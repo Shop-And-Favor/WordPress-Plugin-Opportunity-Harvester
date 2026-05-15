@@ -1,5 +1,6 @@
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "rhel-openssl-3.0.x"]
 }
 
 datasource db {
@@ -31,6 +32,28 @@ enum OpportunityTier {
   high
   medium
   low
+}
+
+enum CategorizationStatus {
+  pending
+  processing
+  completed
+  failed
+}
+
+model CategorizationJob {
+  id            Int                  @id @default(autoincrement())
+  status        CategorizationStatus @default(pending)
+  phase         String?              @db.VarChar(50)
+  totalPlugins  Int                  @default(0)
+  processedCount Int                 @default(0)
+  taxonomyCount Int                  @default(0)
+  classifiedCount Int                @default(0)
+  lastError     String?              @db.Text
+  startedAt     DateTime?
+  completedAt   DateTime?
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
 }
 
 model CrawlRun {
