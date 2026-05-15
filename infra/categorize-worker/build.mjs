@@ -14,16 +14,20 @@ await rm(dist, { recursive: true, force: true });
 await mkdir(dist, { recursive: true });
 
 await build({
-  entryPoints: [path.join(root, "src", "handler.ts")],
+  entryPoints: [
+    path.join(root, "src", "handler.ts"),
+    path.join(root, "src", "enqueue.ts"),
+  ],
   bundle: true,
   platform: "node",
   target: "node20",
   format: "cjs",
-  outfile: path.join(dist, "handler.js"),
+  outdir: dist,
   external: [
     "@prisma/client",
     ".prisma/client",
     "@aws-sdk/client-secrets-manager",
+    "@aws-sdk/client-sqs",
   ],
   sourcemap: true,
   alias: {
@@ -44,6 +48,7 @@ const pkgRuntime = {
   dependencies: {
     "@prisma/client": "^6.17.1",
     "@aws-sdk/client-secrets-manager": "^3.740.0",
+    "@aws-sdk/client-sqs": "^3.740.0",
     prisma: "^6.17.1",
   },
 };
@@ -72,10 +77,43 @@ execSync("npx prisma generate", {
   stdio: "inherit",
 });
 
+console.log("[build] Pruning unneeded files to fit Lambda 250MB limit…");
+const toRemove = [
+  "node_modules/prisma",
+  "node_modules/.cache",
+  "node_modules/@prisma/engines",
+  "node_modules/@prisma/fetch-engine",
+  "node_modules/@prisma/get-platform",
+  "node_modules/.prisma/client/query_engine-windows.dll.node",
+  "node_modules/.prisma/client/query_engine_bg.wasm",
+  "node_modules/.prisma/client/query_engine_bg.js",
+  "node_modules/.prisma/client/wasm.js",
+  "node_modules/.prisma/client/wasm.d.ts",
+  "node_modules/.prisma/client/wasm-edge-light-loader.mjs",
+  "node_modules/.prisma/client/wasm-worker-loader.mjs",
+  "node_modules/.prisma/client/edge.js",
+  "node_modules/.prisma/client/edge.d.ts",
+  "node_modules/.prisma/client/index-browser.js",
+  "node_modules/@prisma/client/runtime/edge.js",
+  "node_modules/@prisma/client/runtime/edge-esm.js",
+  "node_modules/@prisma/client/runtime/wasm.js",
+  "node_modules/@prisma/client/runtime/react-native.js",
+];
+for (const rel of toRemove) {
+  const p = path.join(dist, rel);
+  if (existsSync(p)) {
+    await rm(p, { recursive: true, force: true });
+    console.log("  removed", rel);
+  }
+}
+
 console.log("[build] Done. dist/ contents:");
 const files = await readdir(dist);
 for (const f of files) console.log("  -", f);
 
 if (!existsSync(path.join(dist, "handler.js"))) {
   throw new Error("handler.js not found in dist");
+}
+if (!existsSync(path.join(dist, "enqueue.js"))) {
+  throw new Error("enqueue.js not found in dist");
 }

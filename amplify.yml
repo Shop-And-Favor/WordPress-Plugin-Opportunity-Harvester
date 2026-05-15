@@ -21,6 +21,8 @@ frontend:
         - echo "APP_USER_AGENT=$APP_USER_AGENT" >> .env.production
         - echo "AWS_REGION=$AWS_REGION" >> .env.production
         - echo "CATEGORIZE_QUEUE_URL=$CATEGORIZE_QUEUE_URL" >> .env.production
+        - echo "CATEGORIZE_ENQUEUE_URL=$CATEGORIZE_ENQUEUE_URL" >> .env.production
+        - echo "CATEGORIZE_ENQUEUE_SECRET=$CATEGORIZE_ENQUEUE_SECRET" >> .env.production
         - npm run build
   artifacts:
     baseDirectory: .next

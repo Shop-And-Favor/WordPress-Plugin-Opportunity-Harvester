@@ -11,6 +11,18 @@ Parameters:
     Type: String
     Description: ARN of the OpenRouter API key secret
     Default: arn:aws:secretsmanager:eu-west-2:905418231751:secret:secret-api-key-sf-ai-management-helper-openrouter-api-key-8BvnV4
+  DatabaseUrl:
+    Type: String
+    Description: Direct DATABASE_URL (preferred over Secrets Manager fetch)
+    NoEcho: true
+  OpenRouterApiKey:
+    Type: String
+    Description: Direct OPENROUTER_API_KEY
+    NoEcho: true
+  EnqueueSharedSecret:
+    Type: String
+    Description: Shared secret required in X-Shared-Secret header on enqueue Function URL
+    NoEcho: true
 
 Globals:
   Function:
@@ -48,6 +60,8 @@ Resources:
         Variables:
           DB_SECRET_ARN: !Ref DbSecretArn
           OPENROUTER_SECRET_ARN: !Ref OpenRouterSecretArn
+          DATABASE_URL: !Ref DatabaseUrl
+          OPENROUTER_API_KEY: !Ref OpenRouterApiKey
           AWS_NODEJS_CONNECTION_REUSE_ENABLED: "1"
       Policies:
         - Statement:
@@ -64,6 +78,30 @@ Resources:
             Queue: !GetAtt CategorizeQueue.Arn
             BatchSize: 1
 
+  CategorizeEnqueueFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: categorize-enqueue
+      Handler: enqueue.handler
+      CodeUri: ./dist
+      MemorySize: 512
+      Timeout: 15
+      Environment:
+        Variables:
+          DATABASE_URL: !Ref DatabaseUrl
+          CATEGORIZE_QUEUE_URL: !Ref CategorizeQueue
+          ENQUEUE_SHARED_SECRET: !Ref EnqueueSharedSecret
+          AWS_NODEJS_CONNECTION_REUSE_ENABLED: "1"
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - sqs:SendMessage
+              Resource: !GetAtt CategorizeQueue.Arn
+      FunctionUrlConfig:
+        AuthType: NONE
+        InvokeMode: BUFFERED
+
 Outputs:
   QueueUrl:
     Description: SQS queue URL for enqueueing categorize jobs
@@ -75,3 +113,8 @@ Outputs:
     Value: !GetAtt CategorizeQueue.Arn
     Export:
       Name: CategorizeQueueArn
+  EnqueueFunctionUrl:
+    Description: Function URL for enqueueing categorize jobs from SSR
+    Value: !GetAtt CategorizeEnqueueFnUrl.FunctionUrl
+    Export:
+      Name: CategorizeEnqueueUrl
