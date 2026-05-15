@@ -78,6 +78,15 @@ export async function ensureDatabaseUrlFromSecrets() {
     return { databaseUrl: process.env.DATABASE_URL!, openRouterKey: process.env.OPENROUTER_API_KEY };
   }
 
+  console.log(
+    "[secrets] needsDb:", needsDb,
+    "needsOrKey:", needsOrKey,
+    "DATABASE_URL set:", !!process.env.DATABASE_URL,
+    "DATABASE_URL length:", process.env.DATABASE_URL?.length ?? 0,
+    "OPENROUTER_API_KEY set:", !!process.env.OPENROUTER_API_KEY,
+    "DB_SECRET_ARN set:", !!process.env.DB_SECRET_ARN,
+  );
+
   if (resolving) {
     await new Promise((resolve) => setTimeout(resolve, 100));
     return ensureDatabaseUrlFromSecrets();
@@ -87,21 +96,33 @@ export async function ensureDatabaseUrlFromSecrets() {
 
   try {
     const env = getEnv();
-    const client = new SecretsManagerClient({ region: env.AWS_REGION });
+    const region = env.AWS_REGION ?? "eu-west-2";
+    const client = new SecretsManagerClient({ region });
 
     let dbUrl = process.env.DATABASE_URL;
 
     if (needsDb) {
-      // Fetch database credentials
-      const dbResponse = await client.send(
-        new GetSecretValueCommand({ SecretId: env.DB_SECRET_ARN }),
-      );
-
-      if (!dbResponse.SecretString) {
-        throw new Error("DB secret has no SecretString payload.");
+      if (!env.DB_SECRET_ARN) {
+        throw new Error(
+          "DATABASE_URL is not set and DB_SECRET_ARN is not configured. " +
+          "Set DATABASE_URL directly or provide DB_SECRET_ARN for Secrets Manager fallback.",
+        );
       }
 
-      const dbPayload = parseSecretPayload(dbResponse.SecretString);
+      let dbPayload: Record<string, string>;
+      try {
+        const dbResponse = await client.send(
+          new GetSecretValueCommand({ SecretId: env.DB_SECRET_ARN }),
+        );
+        if (!dbResponse.SecretString) {
+          throw new Error("DB secret has no SecretString payload.");
+        }
+        dbPayload = parseSecretPayload(dbResponse.SecretString);
+      } catch (smErr) {
+        throw new Error(
+          `DATABASE_URL is not set and Secrets Manager fetch failed: ${smErr instanceof Error ? smErr.message : String(smErr)}`,
+        );
+      }
 
       const endpoint = dbPayload.DB_ENDPOINT;
       const username = dbPayload.DB_USERNAME;
