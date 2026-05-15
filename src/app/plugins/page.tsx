@@ -38,43 +38,45 @@ type Filters = {
   tier: "all" | "high" | "medium" | "low";
   minScore: number;
   maxScore: number;
-  minInstalls: number;
+  minInstallsExp: number;
+  maxInstallsExp: number;
   minRating: number;
+  maxRating: number;
   minDemand: number;
   maxDemand: number;
   minCompetition: number;
   maxCompetition: number;
 };
 
+// Installs use a log scale: slider 0..8 maps to 10^slider.
+// 0 = 1 install (effectively "any"), 8 = 100M+ (open upper bound).
+const INSTALLS_MIN_EXP = 0;
+const INSTALLS_MAX_EXP = 8;
+
 const DEFAULT_FILTERS: Filters = {
   search: "",
   tier: "all",
   minScore: 0,
   maxScore: 1,
-  minInstalls: 0,
+  minInstallsExp: INSTALLS_MIN_EXP,
+  maxInstallsExp: INSTALLS_MAX_EXP,
   minRating: 0,
+  maxRating: 5,
   minDemand: 0,
   maxDemand: 1,
   minCompetition: 0,
   maxCompetition: 1,
 };
 
-const INSTALL_BUCKETS: { label: string; value: number }[] = [
-  { label: "Any", value: 0 },
-  { label: "100+", value: 100 },
-  { label: "1K+", value: 1_000 },
-  { label: "10K+", value: 10_000 },
-  { label: "100K+", value: 100_000 },
-  { label: "1M+", value: 1_000_000 },
-];
+function expToInstalls(exp: number): number {
+  return Math.round(Math.pow(10, exp));
+}
 
-const RATING_BUCKETS: { label: string; value: number }[] = [
-  { label: "Any", value: 0 },
-  { label: "3+", value: 3 },
-  { label: "3.5+", value: 3.5 },
-  { label: "4+", value: 4 },
-  { label: "4.5+", value: 4.5 },
-];
+function formatInstalls(value: number): string {
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(value >= 10_000_000 ? 0 : 1).replace(/\.0$/, "")}M`;
+  if (value >= 1_000) return `${(value / 1_000).toFixed(value >= 10_000 ? 0 : 1).replace(/\.0$/, "")}K`;
+  return value.toString();
+}
 
 function TierBadge({ tier }: { tier: string | null }) {
   const map: Record<string, string> = {
@@ -159,10 +161,14 @@ export default function PluginsPage() {
       if (score > filters.maxScore) return false;
 
       const installs = plugin.activeInstalls ?? 0;
-      if (installs < filters.minInstalls) return false;
+      const minInstalls = filters.minInstallsExp <= INSTALLS_MIN_EXP ? 0 : expToInstalls(filters.minInstallsExp);
+      const maxInstalls = filters.maxInstallsExp >= INSTALLS_MAX_EXP ? Infinity : expToInstalls(filters.maxInstallsExp);
+      if (installs < minInstalls) return false;
+      if (installs > maxInstalls) return false;
 
       const rating = plugin.rating ?? 0;
       if (rating < filters.minRating) return false;
+      if (rating > filters.maxRating) return false;
 
       const demand = plugin.demandScore ?? 0;
       if (demand < filters.minDemand) return false;
@@ -225,8 +231,10 @@ export default function PluginsPage() {
     filters.tier !== "all" ||
     filters.minScore !== 0 ||
     filters.maxScore !== 1 ||
-    filters.minInstalls !== 0 ||
+    filters.minInstallsExp !== INSTALLS_MIN_EXP ||
+    filters.maxInstallsExp !== INSTALLS_MAX_EXP ||
     filters.minRating !== 0 ||
+    filters.maxRating !== 5 ||
     filters.minDemand !== 0 ||
     filters.maxDemand !== 1 ||
     filters.minCompetition !== 0 ||
@@ -391,51 +399,97 @@ export default function PluginsPage() {
 
                 <div>
                   <label className="mb-1.5 block text-xs font-medium text-slate-500 dark:text-slate-400">
-                    Min active installs
+                    Active installs
+                    <span className="ml-1 font-normal text-slate-400">
+                      {filters.minInstallsExp <= INSTALLS_MIN_EXP ? "0" : formatInstalls(expToInstalls(filters.minInstallsExp))}
+                      {" - "}
+                      {filters.maxInstallsExp >= INSTALLS_MAX_EXP ? "∞" : formatInstalls(expToInstalls(filters.maxInstallsExp))}
+                    </span>
                   </label>
-                  <div className="flex flex-wrap gap-1.5">
-                    {INSTALL_BUCKETS.map((bucket) => {
-                      const active = filters.minInstalls === bucket.value;
-                      return (
-                        <button
-                          key={bucket.value}
-                          type="button"
-                          onClick={() => updateFilters((current) => ({ ...current, minInstalls: bucket.value }))}
-                          className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
-                            active
-                              ? "bg-cyan-600 text-white"
-                              : "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700"
-                          }`}
-                        >
-                          {bucket.label}
-                        </button>
-                      );
-                    })}
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <span className="w-6 text-xs text-slate-400">Min</span>
+                      <input
+                        type="range"
+                        min={INSTALLS_MIN_EXP}
+                        max={INSTALLS_MAX_EXP}
+                        step={0.1}
+                        value={filters.minInstallsExp}
+                        onChange={(event) => {
+                          const value = parseFloat(event.target.value);
+                          updateFilters((current) => ({
+                            ...current,
+                            minInstallsExp: Math.min(value, current.maxInstallsExp - 0.1),
+                          }));
+                        }}
+                        className="w-full accent-cyan-500"
+                      />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="w-6 text-xs text-slate-400">Max</span>
+                      <input
+                        type="range"
+                        min={INSTALLS_MIN_EXP}
+                        max={INSTALLS_MAX_EXP}
+                        step={0.1}
+                        value={filters.maxInstallsExp}
+                        onChange={(event) => {
+                          const value = parseFloat(event.target.value);
+                          updateFilters((current) => ({
+                            ...current,
+                            maxInstallsExp: Math.max(value, current.minInstallsExp + 0.1),
+                          }));
+                        }}
+                        className="w-full accent-cyan-500"
+                      />
+                    </div>
                   </div>
                 </div>
 
                 <div>
                   <label className="mb-1.5 block text-xs font-medium text-slate-500 dark:text-slate-400">
-                    Min rating
+                    Rating
+                    <span className="ml-1 font-normal text-slate-400">
+                      {filters.minRating.toFixed(1)} - {filters.maxRating.toFixed(1)}
+                    </span>
                   </label>
-                  <div className="flex flex-wrap gap-1.5">
-                    {RATING_BUCKETS.map((bucket) => {
-                      const active = filters.minRating === bucket.value;
-                      return (
-                        <button
-                          key={bucket.value}
-                          type="button"
-                          onClick={() => updateFilters((current) => ({ ...current, minRating: bucket.value }))}
-                          className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
-                            active
-                              ? "bg-cyan-600 text-white"
-                              : "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700"
-                          }`}
-                        >
-                          {bucket.label}
-                        </button>
-                      );
-                    })}
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <span className="w-6 text-xs text-slate-400">Min</span>
+                      <input
+                        type="range"
+                        min={0}
+                        max={5}
+                        step={0.1}
+                        value={filters.minRating}
+                        onChange={(event) => {
+                          const value = parseFloat(event.target.value);
+                          updateFilters((current) => ({
+                            ...current,
+                            minRating: Math.min(value, current.maxRating - 0.1),
+                          }));
+                        }}
+                        className="w-full accent-cyan-500"
+                      />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="w-6 text-xs text-slate-400">Max</span>
+                      <input
+                        type="range"
+                        min={0}
+                        max={5}
+                        step={0.1}
+                        value={filters.maxRating}
+                        onChange={(event) => {
+                          const value = parseFloat(event.target.value);
+                          updateFilters((current) => ({
+                            ...current,
+                            maxRating: Math.max(value, current.minRating + 0.1),
+                          }));
+                        }}
+                        className="w-full accent-cyan-500"
+                      />
+                    </div>
                   </div>
                 </div>
 
