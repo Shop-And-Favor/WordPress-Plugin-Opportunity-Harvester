@@ -14,18 +14,19 @@ export async function getPrisma() {
 
   const { PrismaClient } = await import("@prisma/client");
 
-  // Append connection pool params to avoid pool exhaustion when the 5s polling
-  // refresh fires concurrently with a batch: fewer connections (5) + longer
-  // wait (30s) prevents "Timed out fetching a new connection" errors.
+  // Serverless tuning: each Lambda invocation reuses one connection.
+  // connection_limit=1 prevents RDS connection exhaustion when many Lambda
+  // instances are warm. pool_timeout=30 lets a request wait briefly for the
+  // single slot. Adjust upward only if a single request needs parallel queries.
   const baseUrl = process.env.DATABASE_URL ?? "";
   const separator = baseUrl.includes("?") ? "&" : "?";
-  const poolUrl = `${baseUrl}${separator}connection_limit=5&pool_timeout=30`;
+  const poolUrl = `${baseUrl}${separator}connection_limit=1&pool_timeout=30`;
 
   const prisma = new PrismaClient({ datasourceUrl: poolUrl });
 
-  if (process.env.NODE_ENV !== "production") {
-    global.__prismaClient = prisma;
-  }
+  // Cache globally in ALL environments — including production Lambda — so
+  // warm invocations reuse the same client instead of opening new connections.
+  global.__prismaClient = prisma;
 
   return prisma;
 }
