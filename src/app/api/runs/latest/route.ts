@@ -90,15 +90,24 @@ export async function GET() {
       console.error("Stack trace:", stack);
     }
     
-    // Database not configured error
-    if (message.includes("DATABASE_URL") || message.includes("DB_SECRET") || message.includes("AWS")) {
+    // Connectivity / config errors — return full details to help debug
+    if (
+      message.includes("DATABASE_URL") ||
+      message.includes("DB_SECRET") ||
+      message.includes("AWS") ||
+      message.includes("ECONNREFUSED") ||
+      message.includes("ETIMEDOUT") ||
+      message.includes("Can't reach database") ||
+      message.includes("P1001") ||
+      message.includes("P1002")
+    ) {
       return NextResponse.json({
         ok: false,
-        error: "Database not configured. Set DATABASE_URL in .env.local or configure AWS Secrets Manager.",
-        details: message
+        error: "Database not configured or unreachable.",
+        details: message,
       }, { status: 503 });
     }
-    
-    return NextResponse.json({ ok: false, error: message }, { status: 500 });
+
+    return NextResponse.json({ ok: false, error: message, details: stack?.substring(0, 500) }, { status: 500 });
   }
 }
