@@ -38,6 +38,12 @@ type Filters = {
   tier: "all" | "high" | "medium" | "low";
   minScore: number;
   maxScore: number;
+  minInstalls: number;
+  minRating: number;
+  minDemand: number;
+  maxDemand: number;
+  minCompetition: number;
+  maxCompetition: number;
 };
 
 const DEFAULT_FILTERS: Filters = {
@@ -45,7 +51,30 @@ const DEFAULT_FILTERS: Filters = {
   tier: "all",
   minScore: 0,
   maxScore: 1,
+  minInstalls: 0,
+  minRating: 0,
+  minDemand: 0,
+  maxDemand: 1,
+  minCompetition: 0,
+  maxCompetition: 1,
 };
+
+const INSTALL_BUCKETS: { label: string; value: number }[] = [
+  { label: "Any", value: 0 },
+  { label: "100+", value: 100 },
+  { label: "1K+", value: 1_000 },
+  { label: "10K+", value: 10_000 },
+  { label: "100K+", value: 100_000 },
+  { label: "1M+", value: 1_000_000 },
+];
+
+const RATING_BUCKETS: { label: string; value: number }[] = [
+  { label: "Any", value: 0 },
+  { label: "3+", value: 3 },
+  { label: "3.5+", value: 3.5 },
+  { label: "4+", value: 4 },
+  { label: "4.5+", value: 4.5 },
+];
 
 function TierBadge({ tier }: { tier: string | null }) {
   const map: Record<string, string> = {
@@ -129,6 +158,20 @@ export default function PluginsPage() {
       if (score < filters.minScore) return false;
       if (score > filters.maxScore) return false;
 
+      const installs = plugin.activeInstalls ?? 0;
+      if (installs < filters.minInstalls) return false;
+
+      const rating = plugin.rating ?? 0;
+      if (rating < filters.minRating) return false;
+
+      const demand = plugin.demandScore ?? 0;
+      if (demand < filters.minDemand) return false;
+      if (demand > filters.maxDemand) return false;
+
+      const competition = plugin.competitionScore ?? 0;
+      if (competition < filters.minCompetition) return false;
+      if (competition > filters.maxCompetition) return false;
+
       if (
         !matchesCategorySelection({
           category: plugin.category,
@@ -182,6 +225,12 @@ export default function PluginsPage() {
     filters.tier !== "all" ||
     filters.minScore !== 0 ||
     filters.maxScore !== 1 ||
+    filters.minInstalls !== 0 ||
+    filters.minRating !== 0 ||
+    filters.minDemand !== 0 ||
+    filters.maxDemand !== 1 ||
+    filters.minCompetition !== 0 ||
+    filters.maxCompetition !== 1 ||
     selectedCategories.length > 0 ||
     selectedSubcategories.length > 0;
 
@@ -332,6 +381,150 @@ export default function PluginsPage() {
                           updateFilters((current) => ({
                             ...current,
                             maxScore: Math.max(value, current.minScore + 0.05),
+                          }));
+                        }}
+                        className="w-full accent-cyan-500"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block text-xs font-medium text-slate-500 dark:text-slate-400">
+                    Min active installs
+                  </label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {INSTALL_BUCKETS.map((bucket) => {
+                      const active = filters.minInstalls === bucket.value;
+                      return (
+                        <button
+                          key={bucket.value}
+                          type="button"
+                          onClick={() => updateFilters((current) => ({ ...current, minInstalls: bucket.value }))}
+                          className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
+                            active
+                              ? "bg-cyan-600 text-white"
+                              : "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700"
+                          }`}
+                        >
+                          {bucket.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block text-xs font-medium text-slate-500 dark:text-slate-400">
+                    Min rating
+                  </label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {RATING_BUCKETS.map((bucket) => {
+                      const active = filters.minRating === bucket.value;
+                      return (
+                        <button
+                          key={bucket.value}
+                          type="button"
+                          onClick={() => updateFilters((current) => ({ ...current, minRating: bucket.value }))}
+                          className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
+                            active
+                              ? "bg-cyan-600 text-white"
+                              : "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700"
+                          }`}
+                        >
+                          {bucket.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block text-xs font-medium text-slate-500 dark:text-slate-400">
+                    Demand range
+                    <span className="ml-1 font-normal text-slate-400">
+                      {filters.minDemand.toFixed(2)} - {filters.maxDemand.toFixed(2)}
+                    </span>
+                  </label>
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <span className="w-6 text-xs text-slate-400">Min</span>
+                      <input
+                        type="range"
+                        min={0}
+                        max={1}
+                        step={0.05}
+                        value={filters.minDemand}
+                        onChange={(event) => {
+                          const value = parseFloat(event.target.value);
+                          updateFilters((current) => ({
+                            ...current,
+                            minDemand: Math.min(value, current.maxDemand - 0.05),
+                          }));
+                        }}
+                        className="w-full accent-cyan-500"
+                      />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="w-6 text-xs text-slate-400">Max</span>
+                      <input
+                        type="range"
+                        min={0}
+                        max={1}
+                        step={0.05}
+                        value={filters.maxDemand}
+                        onChange={(event) => {
+                          const value = parseFloat(event.target.value);
+                          updateFilters((current) => ({
+                            ...current,
+                            maxDemand: Math.max(value, current.minDemand + 0.05),
+                          }));
+                        }}
+                        className="w-full accent-cyan-500"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block text-xs font-medium text-slate-500 dark:text-slate-400">
+                    Competition range
+                    <span className="ml-1 font-normal text-slate-400">
+                      {filters.minCompetition.toFixed(2)} - {filters.maxCompetition.toFixed(2)}
+                    </span>
+                  </label>
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <span className="w-6 text-xs text-slate-400">Min</span>
+                      <input
+                        type="range"
+                        min={0}
+                        max={1}
+                        step={0.05}
+                        value={filters.minCompetition}
+                        onChange={(event) => {
+                          const value = parseFloat(event.target.value);
+                          updateFilters((current) => ({
+                            ...current,
+                            minCompetition: Math.min(value, current.maxCompetition - 0.05),
+                          }));
+                        }}
+                        className="w-full accent-cyan-500"
+                      />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="w-6 text-xs text-slate-400">Max</span>
+                      <input
+                        type="range"
+                        min={0}
+                        max={1}
+                        step={0.05}
+                        value={filters.maxCompetition}
+                        onChange={(event) => {
+                          const value = parseFloat(event.target.value);
+                          updateFilters((current) => ({
+                            ...current,
+                            maxCompetition: Math.max(value, current.minCompetition + 0.05),
                           }));
                         }}
                         className="w-full accent-cyan-500"
