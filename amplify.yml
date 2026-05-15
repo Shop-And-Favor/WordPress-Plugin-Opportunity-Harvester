@@ -10,6 +10,16 @@ frontend:
         - npx prisma generate
     build:
       commands:
+        # Write Amplify env vars into .env.production so Next.js bakes them
+        # into the SSR bundle (Amplify SSR runtime doesn't expose env vars
+        # directly to Lambda compute — must be embedded at build time).
+        - echo "DATABASE_URL=$DATABASE_URL" >> .env.production
+        - echo "OPENROUTER_API_KEY=$OPENROUTER_API_KEY" >> .env.production
+        - echo "DB_SECRET_ARN=$DB_SECRET_ARN" >> .env.production
+        - echo "OPENROUTER_SECRET_ARN=$OPENROUTER_SECRET_ARN" >> .env.production
+        - echo "DB_PORT=$DB_PORT" >> .env.production
+        - echo "APP_USER_AGENT=$APP_USER_AGENT" >> .env.production
+        - echo "AWS_REGION=$AWS_REGION" >> .env.production
         - npm run build
   artifacts:
     baseDirectory: .next
