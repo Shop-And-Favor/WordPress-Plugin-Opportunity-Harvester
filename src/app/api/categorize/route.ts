@@ -31,7 +31,8 @@ export async function POST() {
     return NextResponse.json({ ok: true, jobId: job.id });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Enqueue failed";
-    console.error("[/api/categorize] enqueue error:", message);
-    return NextResponse.json({ ok: false, error: message }, { status: 500 });
+    const stack = error instanceof Error ? error.stack?.slice(0, 1000) : undefined;
+    console.error("[/api/categorize] enqueue error:", message, stack);
+    return NextResponse.json({ ok: false, error: message, stack }, { status: 500 });
   }
 }
