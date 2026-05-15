@@ -1,36 +1,90 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# WordPress Plugin Opportunity Harvester
 
-## Getting Started
+Next.js + Prisma app to discover and rank plugin opportunities from WordPress.org.
 
-First, run the development server:
+## Implemented in this phase
 
+- OpenRouter query generation (Gemini primary, OpenAI fallback)
+- Query deduplication by normalized text
+- WordPress plugin query fetch (top N up to 10) with conservative delay and retries
+- Plugin + query opportunity scoring
+- MySQL persistence via Prisma
+- Manual Start/Continue workflow with progress dashboard
+- Runtime DB credential loading from AWS Secrets Manager
+
+## Testing
+
+Comprehensive test suite with **40 tests** across **5 modules** (all passing):
+
+| Module | Tests | Coverage |
+|--------|-------|----------|
+| `normalize.ts` | 11 | Query text normalization, deduplication, clamping |
+| `scoring.ts` | 10 | Opportunity scoring, demand detection, tier classification |
+| `openrouter.ts` | 5 | LLM query generation, deduplication, fallback behavior |
+| `wordpress.ts` | 6 | Plugin API fetch, rate limiting, rating conversion, data validation |
+| `throttle.ts` | 8 | Rate limiting, retry logic, exponential backoff |
+
+**Run tests:**
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm run test          # Run once
+npm run test:watch   # Watch mode
+npm run test:ui      # Visual UI dashboard
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Environment
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Copy `.env.example` to `.env.local` and set values:
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+OPENROUTER_API_KEY=...
+DB_SECRET_ARN=arn:aws:secretsmanager:eu-west-2:...
+AWS_REGION=eu-west-2
+DB_PORT=3306
+APP_USER_AGENT=WP-Opportunity-Harvester/1.0 (respectful crawler)
+```
 
-## Learn More
+Optional fallback if you do not want AWS secret fetch in runtime:
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+DATABASE_URL=mysql://user:password@host:3306/database
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Install and run
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```bash
+npm install
+npm run prisma:generate
+npm run prisma:push
+npm run dev
+```
 
-## Deploy on Vercel
+Then open http://localhost:3000 in your browser.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+**Quick start (Windows PowerShell — opens browser automatically):**
+```powershell
+npm run dev; Start-Process http://localhost:3000
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Flow
+
+1. Click `Start` to generate and insert distinct queries for a run.
+2. Click `Continue` to process next pending batch and store plugins/results.
+3. Repeat `Continue` until pending reaches 0.
+
+The app does not restart old queries because normalized query text is unique in DB.
+
+## Scripts
+
+- `npm run dev` — Start Next.js dev server
+- `npm run lint` — Run ESLint
+- `npm run typecheck` — Run TypeScript type check
+- `npm run test` — Run Vitest suite (40 tests across 5 modules)
+- `npm run test:watch` — Run tests in watch mode
+- `npm run test:ui` — Run tests with Vitest UI
+- `npm run prisma:generate` — Generate Prisma client
+- `npm run prisma:push` — Push schema to database
+
+## Current limitations
+
+- No background worker yet (manual Continue only)
+- No historical snapshot tables yet

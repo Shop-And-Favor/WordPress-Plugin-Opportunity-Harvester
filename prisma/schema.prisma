@@ -1,0 +1,149 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum RunStatus {
+  idle
+  running
+  completed
+  failed
+}
+
+enum QueryType {
+  short
+  long
+}
+
+enum QueryStatus {
+  pending
+  processing
+  completed
+  failed
+  skipped
+}
+
+enum OpportunityTier {
+  high
+  medium
+  low
+}
+
+model CrawlRun {
+  id             Int       @id @default(autoincrement())
+  status         RunStatus @default(running)
+  queryTarget    Int
+  topN           Int       @default(10)
+  generatedCount Int       @default(0)
+  insertedCount  Int       @default(0)
+  processedCount Int       @default(0)
+  completedAt    DateTime?
+  lastError      String?   @db.Text
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  queries SearchQuery[]
+}
+
+model SearchQuery {
+  id               Int              @id @default(autoincrement())
+  runId            Int
+  run              CrawlRun         @relation(fields: [runId], references: [id], onDelete: Cascade)
+  queryText        String           @db.VarChar(255)
+  normalizedQuery  String           @unique @db.VarChar(255)
+  queryType        QueryType
+  status           QueryStatus      @default(pending)
+  attempts         Int              @default(0)
+  topPluginCount   Int              @default(0)
+  lowDemandSignal  Boolean          @default(false)
+  opportunityScore Float?
+  opportunityTier  OpportunityTier?
+  lastError        String?          @db.Text
+  processedAt      DateTime?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  plugins QueryPlugin[]
+
+  @@index([runId, status])
+  @@index([runId, opportunityScore])
+}
+
+model Plugin {
+  id                Int              @id @default(autoincrement())
+  slug              String           @unique @db.VarChar(255)
+  pluginUrl         String           @unique @db.VarChar(255)
+  name              String           @db.VarChar(255)
+  shortDescription  String?          @db.Text
+  author            String?          @db.VarChar(255)
+  rating            Float?
+  ratingCount       Int?
+  activeInstalls    Int?
+  downloadedCount   Int?
+  lastUpdated       DateTime?
+  testedUpTo        String?          @db.VarChar(50)
+  requiresWpVersion String?          @db.VarChar(50)
+  requiresPhp       String?          @db.VarChar(50)
+  demandScore       Float?
+  competitionScore  Float?
+  satisfactionScore Float?
+  freshnessScore    Float?
+  opportunityScore  Float?
+  opportunityTier   OpportunityTier?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  queries    QueryPlugin[]
+  categories PluginCategoryMap[]
+
+  @@index([opportunityScore])
+  @@index([activeInstalls])
+}
+
+model PluginCategory {
+  id               Int              @id @default(autoincrement())
+  category         String           @db.VarChar(100)
+  subcategory      String           @db.VarChar(100)
+  description      String?          @db.Text
+  pluginCount      Int              @default(0)
+  opportunityScore Float?
+  opportunityTier  OpportunityTier?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  plugins PluginCategoryMap[]
+
+  @@unique([category, subcategory])
+  @@index([opportunityScore])
+}
+
+model PluginCategoryMap {
+  id         Int      @id @default(autoincrement())
+  pluginId   Int
+  categoryId Int
+  createdAt  DateTime @default(now())
+
+  plugin   Plugin         @relation(fields: [pluginId], references: [id], onDelete: Cascade)
+  category PluginCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@unique([pluginId, categoryId])
+  @@index([categoryId])
+}
+
+model QueryPlugin {
+  id        Int      @id @default(autoincrement())
+  queryId   Int
+  pluginId  Int
+  position  Int
+  createdAt DateTime @default(now())
+
+  query  SearchQuery @relation(fields: [queryId], references: [id], onDelete: Cascade)
+  plugin Plugin      @relation(fields: [pluginId], references: [id], onDelete: Cascade)
+
+  @@unique([queryId, pluginId])
+  @@index([queryId, position])
+}
